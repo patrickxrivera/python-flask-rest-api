@@ -1,17 +1,20 @@
 from flask_restful import Resource, reqparse
 from flask_jwt import jwt_required
 from models.item import ItemModel
-import sqlite3
 
 
 class Item(Resource):
-    TABLE_NAME = 'items'
-
     parser = reqparse.RequestParser()
     parser.add_argument('price',
                         type=float,
                         required=True,
                         help="This field cannot be left blank!"
+                        )
+
+    parser.add_argument('store_id',
+                        type=int,
+                        required=True,
+                        help="Every item needs a store id!"
                         )
 
     @jwt_required()
@@ -26,7 +29,7 @@ class Item(Resource):
             return {'message': "An item with name '{}' already exists.".format(name)}
 
         data = Item.parser.parse_args()
-        item = ItemModel(name, data['price'])
+        item = ItemModel(name, **data)
 
         try:
             item.save_to_db()
@@ -51,7 +54,7 @@ class Item(Resource):
         item = ItemModel.find_by_name(name)
 
         if item is None:
-            item = ItemModel(name, data['price'])
+            item = ItemModel(name, **data)
         else:
             item.price = data['price']
 
@@ -61,17 +64,5 @@ class Item(Resource):
 
 
 class ItemList(Resource):
-    TABLE_NAME = 'items'
-
     def get(self):
-        connection = sqlite3.connect('data.db')
-        cursor = connection.cursor()
-
-        query = "SELECT * FROM {table}".format(table=self.TABLE_NAME)
-        result = cursor.execute(query)
-        items = []
-        for _, name, price in result:
-            items.append({'name': name, 'price': price})
-        connection.close()
-
-        return {'items': items}
+        return {'items': [item.json() for item in ItemModel.query.all()]}
