@@ -18,7 +18,7 @@ class Item(Resource):
     def get(self, name):
         item = ItemModel.find_by_name(name)
         if item:
-            return item
+            return item.json()
         return {'message': 'Item not found'}, 404
 
     def post(self, name):
@@ -26,46 +26,38 @@ class Item(Resource):
             return {'message': "An item with name '{}' already exists.".format(name)}
 
         data = Item.parser.parse_args()
-
-        item = {'name': name, 'price': data['price']}
+        item = ItemModel(name, data['price'])
 
         try:
-            ItemModel.insert(item)
+            item.save_to_db()
         except:
             return {"message": "An error occurred inserting the item."}
 
-        return item
+        return item.json(), 201
 
     @jwt_required()
     def delete(self, name):
-        connection = sqlite3.connect('data.db')
-        cursor = connection.cursor()
-
-        query = "DELETE FROM {table} WHERE name=?".format(
-            table=self.TABLE_NAME)
-        cursor.execute(query, (name,))
-
-        connection.commit()
-        connection.close()
-
-        return {'message': 'Item deleted'}
+        item = ItemModel.find_by_name(name)
+        if item:
+            item.delete_from_db()
+            return {'message': 'Item deleted'}
+        else:
+            return {'message': 'No user with that name.'}
 
     @jwt_required()
     def put(self, name):
         data = Item.parser.parse_args()
+
         item = ItemModel.find_by_name(name)
-        updated_item = {'name': name, 'price': data['price']}
+
         if item is None:
-            try:
-                ItemModel.insert(updated_item)
-            except:
-                return {"message": "An error occurred inserting the item."}
+            item = ItemModel(name, data['price'])
         else:
-            try:
-                ItemModel.update(updated_item)
-            except:
-                return {"message": "An error occurred updating the item."}
-        return updated_item
+            item.price = data['price']
+
+        item.save_to_db()
+
+        return item.json()
 
 
 class ItemList(Resource):
@@ -78,8 +70,8 @@ class ItemList(Resource):
         query = "SELECT * FROM {table}".format(table=self.TABLE_NAME)
         result = cursor.execute(query)
         items = []
-        for row in result:
-            items.append({'name': row[0], 'price': row[1]})
+        for _, name, price in result:
+            items.append({'name': name, 'price': price})
         connection.close()
 
         return {'items': items}
